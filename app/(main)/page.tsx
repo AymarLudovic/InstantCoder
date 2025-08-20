@@ -26,8 +26,8 @@ export default function Home() {
       value: "gemini-2.0-flash-exp",
     },
     {
-      label: "gemini-1.5-pro",
-      value: "gemini-1.5-pro",
+      label: "gemini-2.5-flash",
+      value: "gemini-2.5-flash",
     },
     {
       label: "gemini-1.5-flash",
