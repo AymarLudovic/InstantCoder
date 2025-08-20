@@ -2,7 +2,7 @@ import dedent from "dedent";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const apiKey = process.env.GOOGLE_AI_API_KEY || "";
+const apiKey = "AIzaSyDQRPehpA6TVODVOcofx7NCQr7vhTnk6zM";
 const genAI = new GoogleGenerativeAI(apiKey);
 
 export async function POST(req: Request) {
