@@ -1,9 +1,10 @@
 import dedent from "dedent";
 import { z } from "zod";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
-const apiKey = "AIzaSyDQRPehpA6TVODVOcofx7NCQr7vhTnk6zM";
-const genAI = new GoogleGenerativeAI(apiKey);
+const ai = new GoogleGenAI({
+  apiKey: "AIzaSyDQRPehpA6TVODVOcofx7NCQr7vhTnk6zM", // utilise la variable d'env au lieu de hardcoder
+});
 
 export async function POST(req: Request) {
   let json = await req.json();
@@ -26,25 +27,39 @@ export async function POST(req: Request) {
   let { model, messages } = result.data;
   let systemPrompt = getSystemPrompt();
 
-  const geminiModel = genAI.getGenerativeModel({ model: model });
+  const config = {
+    thinkingConfig: { thinkingBudget: -1 },
+    tools: [{ googleSearch: {} }],
+  };
 
-  const geminiStream = await geminiModel.generateContentStream(
-    messages[0].content +
-      systemPrompt +
-      "\nPlease ONLY return code, NO backticks or language names. Don't start with ```typescript or ```javascript or ```tsx or ```."
-  );
+  // On combine le message user avec le systemPrompt
+  const contents = [
+    {
+      role: "user",
+      parts: [
+        {
+          text:
+            messages[0].content +
+            systemPrompt +
+            "\nPlease ONLY return code, NO backticks or language names. Don't start with ```typescript or ```javascript or ```tsx or ```.",
+        },
+      ],
+    },
+  ];
 
-  console.log(
-    messages[0].content +
-      systemPrompt +
-      "\nPlease ONLY return code, NO backticks or language names. Don't start with ```typescript or ```javascript or ```tsx or ```."
-  );
+  // Stream depuis le modèle pro
+  const response = await ai.models.generateContentStream({
+    model: model || "gemini-2.5-pro",
+    config,
+    contents,
+  });
 
   const readableStream = new ReadableStream({
     async start(controller) {
-      for await (const chunk of geminiStream.stream) {
-        const chunkText = chunk.text();
-        controller.enqueue(new TextEncoder().encode(chunkText));
+      for await (const chunk of response) {
+        if (chunk.text) {
+          controller.enqueue(new TextEncoder().encode(chunk.text));
+        }
       }
       controller.close();
     },
@@ -77,4 +92,4 @@ You are an expert frontend React engineer who is also a great UI/UX designer. Fo
 }
 
 export const runtime = "edge";
-      
+    
