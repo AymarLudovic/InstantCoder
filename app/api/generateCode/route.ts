@@ -1,9 +1,10 @@
 import dedent from "dedent";
 import { z } from "zod";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
-const apiKey = "AIzaSyDQRPehpA6TVODVOcofx7NCQr7vhTnk6zM";
-const genAI = new GoogleGenerativeAI(apiKey);
+const ai = new GoogleGenAI({
+  apiKey: "AIzaSyDQRPehpA6TVODVOcofx7NCQr7vhTnk6zM", // utilise la variable d'env au lieu de hardcoder
+});
 
 export async function POST(req: Request) {
   let json = await req.json();
@@ -26,19 +27,39 @@ export async function POST(req: Request) {
   let { model, messages } = result.data;
   let systemPrompt = getSystemPrompt();
 
-  const geminiModel = genAI.getGenerativeModel({model: model});
+  const config = {
+    thinkingConfig: { thinkingBudget: -1 },
+    tools: [{ googleSearch: {} }],
+  };
 
-  const geminiStream = await geminiModel.generateContentStream(
-    messages[0].content + systemPrompt + "\nPlease ONLY return code, NO backticks or language names. Don't start with \`\`\`typescript or \`\`\`javascript or \`\`\`tsx or \`\`\`."
-  );
+  // On combine le message user avec le systemPrompt
+  const contents = [
+    {
+      role: "user",
+      parts: [
+        {
+          text:
+            messages[0].content +
+            systemPrompt +
+            "\nPlease ONLY return code, NO backticks or language names. Don't start with ```typescript or ```javascript or ```tsx or ```.",
+        },
+      ],
+    },
+  ];
 
-  console.log(messages[0].content + systemPrompt + "\nPlease ONLY return code, NO backticks or language names. Don't start with \`\`\`typescript or \`\`\`javascript or \`\`\`tsx or \`\`\`.")
+  // Stream depuis le modèle pro
+  const response = await ai.models.generateContentStream({
+    model: "gemini-2.5-pro",
+    config,
+    contents,
+  });
 
   const readableStream = new ReadableStream({
     async start(controller) {
-      for await (const chunk of geminiStream.stream) {
-        const chunkText = chunk.text();
-        controller.enqueue(new TextEncoder().encode(chunkText));
+      for await (const chunk of response) {
+        if (chunk.text) {
+          controller.enqueue(new TextEncoder().encode(chunk.text));
+        }
       }
       controller.close();
     },
@@ -48,18 +69,18 @@ export async function POST(req: Request) {
 }
 
 function getSystemPrompt() {
-  let systemPrompt = 
-`You are an expert frontend React engineer who is also a great UI/UX designer. Follow the instructions carefully, I will tip you $1 million if you do a good job:
+  let systemPrompt = `
+You are an expert frontend React engineer who is also a great UI/UX designer. Follow the instructions carefully, I will tip you $1 million if you do a good job:
 
 - Think carefully step by step.
 - Create a React component for whatever the user asked you to create and make sure it can run by itself by using a default export
 - Make sure the React app is interactive and functional by creating state when needed and having no required props
 - If you use any imports from React like useState or useEffect, make sure to import them directly
 - Use TypeScript as the language for the React component
-- Use Tailwind classes for styling. DO NOT USE ARBITRARY VALUES (e.g. \`h-[600px]\`). Make sure to use a consistent color palette.
+- Use Tailwind classes for styling. DO NOT USE ARBITRARY VALUES (e.g. h-[600px]). Make sure to use a consistent color palette.
 - Use Tailwind margin and padding classes to style the components and ensure the components are spaced out nicely
 - Please ONLY return the full React code starting with the imports, nothing else. It's very important for my job that you only return the React code with imports. DO NOT START WITH \`\`\`typescript or \`\`\`javascript or \`\`\`tsx or \`\`\`.
-- ONLY IF the user asks for a dashboard, graph or chart, the recharts library is available to be imported, e.g. \`import { LineChart, XAxis, ... } from "recharts"\` & \`<LineChart ...><XAxis dataKey="name"> ...\`. Please only use this when needed.
+- ONLY IF the user asks for a dashboard, graph or chart, the recharts library is available to be imported, e.g. import { LineChart, XAxis, ... } from "recharts" & <LineChart ...><XAxis dataKey="name"> ...</>. Please only use this when needed.
 - For placeholder images, please use a <div className="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16" />
   `;
 
@@ -71,3 +92,4 @@ function getSystemPrompt() {
 }
 
 export const runtime = "edge";
+      
